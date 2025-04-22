@@ -1,37 +1,47 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
 import FileUpload from "../components/FileUpload";
 import FileList from "../components/FileList";
 import ChatArea from "../components/ChatArea";
 
 function FacultyPage() {
-  const [messages, setMessages] = useState([
-    { sender: "Prof. Sharma", text: "Please download the starter code." },
-    { sender: "Student1", text: "Received, thanks!" },
-    { sender: "You", text: "Sure, I am on it!" },
-  ]);
+  const [messages, setMessages] = useState([]);
+  const [ws, setWs] = useState(null);
 
-  const mockFiles = [
-    { name: "starter_code.zip" },
-    { name: "dataset.csv" },
-    { name: "readme.txt" },
-  ];
+  useEffect(() => {
+    // WebSocket setup for receiving messages
+    const websocket = new WebSocket("ws://localhost:3000"); // Server URL
 
-  const handleSendMessage = async (message) => {
-    const newMessage = { sender: "You", text: message };
-    setMessages((prev) => [...prev, newMessage]);
+    websocket.onopen = () => {
+      console.log("Connected to WebSocket server");
+    };
 
-    try {
-      await fetch("http://localhost:3000/broadcast", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ message }),
-      });
-      console.log("Message sent to /broadcast:", message);
-    } catch (err) {
-      console.error("Failed to send message:", err);
+    websocket.onmessage = (event) => {
+      const incomingMessage = JSON.parse(event.data);
+      if (incomingMessage) {
+        setMessages((prevMessages) => [...prevMessages, incomingMessage]);
+      }
+    };
+
+    websocket.onclose = () => {
+      console.log("Disconnected from WebSocket server");
+    };
+
+    setWs(websocket);  // Store WebSocket instance
+
+    // Cleanup WebSocket connection on component unmount
+    return () => {
+      if (websocket) {
+        websocket.close();
+      }
+    };
+  }, []);
+
+  const handleSendMessage = (message) => {
+    if (message.trim() && ws) {
+      const newMessage = { sender: "You", text: message };
+      ws.send(JSON.stringify(newMessage)); // Send message via WebSocket
+      setMessages((prev) => [...prev, newMessage]); // Add message to state for immediate UI update
     }
   };
 
@@ -41,7 +51,7 @@ function FacultyPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="flex flex-col gap-6">
             <FileUpload onUpload={(e) => console.log(e.target.files[0])} />
-            <FileList files={mockFiles} />
+            <FileList files={[]} /> {/* Update to handle file uploads if needed */}
           </div>
           <ChatArea messages={messages} onSendMessage={handleSendMessage} />
         </div>

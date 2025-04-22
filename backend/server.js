@@ -1,11 +1,16 @@
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
+const http = require("http");
+const WebSocket = require("ws");
 const {
   sendMessageToPeer,
   startListening,
   sendFile,
-  getUserNodes
+  getUserNodes,
+  onTextMessage,
+  broadcastMessage,
+  UDP_PORT
 } = require("./message");
 
 const app = express();
@@ -17,40 +22,112 @@ app.use(cors({
   methods: ["GET", "POST"],
   allowedHeaders: ["Content-Type"]
 }));
-
 app.use(express.json());
 app.use(express.static("public"));
 
-startListening();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+const wsClients = new Set();
+
+wss.on("connection", (ws) => {
+  console.log("[WebSocket] New client connected");
+  wsClients.add(ws);
+
+  ws.on("message", (message) => {
+    console.log(`[WebSocket] Received message: ${message}`);
+    broadcastMessage(message.toString());
+    console.log(`[WebSocket] Broadcasted message to ${getUserNodes().length} peers`);
+  });
+
+  ws.on("close", () => {
+    wsClients.delete(ws);
+    console.log("[WebSocket] Client disconnected");
+  });
+
+  ws.send(JSON.stringify({
+    type: "peerList",
+    peers: getUserNodes().map(n => n.address)
+  }));
+});
+
+onTextMessage((msg) => {
+  console.log(`[UDP] Forwarding message to WebSocket clients: ${msg}`);
+  wsClients.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(msg);
+    }
+  });
+});
+
+async function initializeServer() {
+  try {
+    await startListening();
+    
+    server.listen(PORT, () => {
+      console.log(`[Server] HTTP server running at http://localhost:${PORT}`);
+      console.log(`[Server] WebSocket server ready`);
+      console.log(`[Server] UDP listening on port ${UDP_PORT}`);
+      
+      setInterval(() => {
+        const now = Date.now();
+        const activeNodes = getUserNodes().filter(n => now - n.lastSeen < 30000);
+        if (activeNodes.length !== getUserNodes().length) {
+          console.log(`[Discovery] Removed ${getUserNodes().length - activeNodes.length} stale nodes`);
+        }
+      }, 15000);
+    });
+  } catch (err) {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  }
+}
 
 function sendFileToPeers(filePath) {
   const fileId = Date.now().toString();
   const peers = getUserNodes();
+  console.log(`[File] Sending file to ${peers.length} peers`);
   peers.forEach((peer) => {
+    console.log(`[File] Sending to peer: ${peer.address}`);
     sendFile(filePath, fileId, peer.address);
   });
 }
 
 app.post("/upload", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    console.log("[File] No file received in upload");
+    return res.status(400).send("No file uploaded");
+  }
+  console.log(`[File] Received file: ${req.file.originalname}`);
   const filePath = req.file.path;
   sendFileToPeers(filePath);
-  res.json({ message: "File uploaded successfully", filePath: filePath });
+  res.json({ 
+    message: "File uploaded successfully", 
+    filePath: filePath,
+    peers: getUserNodes().length
+  });
 });
 
 app.post("/broadcast", (req, res) => {
   const { message } = req.body;
-  if (!message) return res.status(400).send("Message is required");
+  if (!message) {
+    console.log("[Broadcast] No message provided");
+    return res.status(400).send("Message is required");
+  }
 
-  console.log("Broadcasting message:", message);
+  console.log(`[Broadcast] Broadcasting message: "${message}"`);
   const peers = getUserNodes();
+  console.log(`[Broadcast] Sending to ${peers.length} peers`);
+  
   peers.forEach((node) => {
-    console.log("Sending to ->", node.address);
+    console.log(`[Broadcast] Sending to peer: ${node.address}`);
     sendMessageToPeer(node.address, message);
   });
 
-  res.send("Message sent to all peers");
+  res.json({
+    message: "Message broadcasted",
+    peers: peers.length
+  });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+initializeServer();
