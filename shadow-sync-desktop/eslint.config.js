@@ -5,6 +5,20 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
   { ignores: ['dist'] },
+
+  // Node environment for Electron main/preload scripts
+  {
+    files: ['electron/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+
+  // React and browser settings for frontend
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
