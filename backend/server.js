@@ -10,7 +10,8 @@ const {
   getUserNodes,
   onTextMessage,
   broadcastMessage,
-  UDP_PORT
+  UDP_PORT,
+  getLocalIP
 } = require("./message");
 
 const app = express();
@@ -34,28 +35,50 @@ wss.on("connection", (ws) => {
   console.log("[WebSocket] New client connected");
   wsClients.add(ws);
 
-  ws.on("message", (message) => {
+  ws.on('message', (message) => {
     console.log(`[WebSocket] Received message: ${message}`);
+    
+    // Broadcast to other peers via UDP
     broadcastMessage(message.toString());
-    console.log(`[WebSocket] Broadcasted message to ${getUserNodes().length} peers`);
+    
+    // Immediately send back to sender with 'me' identifier
+    const messageData = {
+      type: 'message',
+      content: message.toString(),
+      sender: 'me'
+    };
+    ws.send(JSON.stringify(messageData));
   });
 
-  ws.on("close", () => {
+  ws.on('close', () => {
     wsClients.delete(ws);
     console.log("[WebSocket] Client disconnected");
   });
 
+  // Send initial peer list
   ws.send(JSON.stringify({
     type: "peerList",
     peers: getUserNodes().map(n => n.address)
   }));
 });
 
-onTextMessage((msg) => {
-  console.log(`[UDP] Forwarding message to WebSocket clients: ${msg}`);
+onTextMessage((msg, rinfo) => {
+  const localIP = getLocalIP();
+  if (rinfo.address === localIP) {
+    console.log(`[UDP] Ignoring self message: ${msg}`);
+    return;
+  }
+
+  console.log(`[UDP] Forwarding message from ${rinfo.address}: ${msg}`);
+  const messageData = {
+    type: 'message',
+    content: msg,
+    sender: rinfo.address
+  };
+  
   wsClients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(msg);
+      ws.send(JSON.stringify(messageData));
     }
   });
 });
@@ -72,9 +95,24 @@ async function initializeServer() {
       setInterval(() => {
         const now = Date.now();
         const activeNodes = getUserNodes().filter(n => now - n.lastSeen < 30000);
+        
+        // Cleanup stale nodes
         if (activeNodes.length !== getUserNodes().length) {
           console.log(`[Discovery] Removed ${getUserNodes().length - activeNodes.length} stale nodes`);
+          userNodes.length = 0;
+          userNodes.push(...activeNodes);
         }
+
+        // Broadcast updated peer list to all clients
+        const peerList = {
+          type: "peerList",
+          peers: activeNodes.map(n => n.address)
+        };
+        wsClients.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(peerList));
+          }
+        });
       }, 15000);
     });
   } catch (err) {
