@@ -1,19 +1,21 @@
 import { motion } from 'framer-motion';
+import './Header.css';
 
 const Header = () => {
   return (
-    <header className="flex justify-between items-center p-6 bg-background-gray shadow-md">
+    <header className="header">
       <motion.h1
-        className="text-3xl font-bold text-primary"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1 }}
+        className="header-title"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: 'easeOut' }}
       >
         Shadow Sync
       </motion.h1>
       <motion.button
-        className="px-6 py-2 rounded-lg text-white bg-primary-dark hover:bg-primary transition-all"
-        whileHover={{ scale: 1.1 }}
+        className="start-session-btn"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.97 }}
       >
         Start Session
       </motion.button>

@@ -1,21 +1,21 @@
-import Header from './components/Header';
+import Layout from './components/Layout';
 import FileSharing from './components/FileSharing';
 import Messaging from './components/Messaging';
-import Footer from './components/Footer';
-import Sidebar from './components/Sidebar';
+import SessionList from './components/SessionList';
+import ChatArea from './components/ChatArea';
+import FileUpload from './components/FileUpload';
+import FileList from './components/FileList';
+import './App.css';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-background-dark text-text-light">
-      <Sidebar />
-      <div className="ml-64">
-        <Header />
-        <main className="p-8">
-          <FileSharing />
-          <Messaging />
-        </main>
-        <Footer />
-      </div>
-    </div>
+    <Layout>
+      <SessionList />
+      <ChatArea />
+      <FileSharing />
+      <FileUpload />
+      <FileList />
+      <Messaging />
+    </Layout>
   );
 }
