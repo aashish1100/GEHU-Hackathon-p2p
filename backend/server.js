@@ -78,7 +78,6 @@ onTextMessage((msg, rinfo) => {
   
   wsClients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
-      console.log(JSON.stringify(messageData));
       ws.send(JSON.stringify(messageData));
     }
   });
@@ -96,10 +95,12 @@ async function initializeServer() {
       setInterval(() => {
         const now = Date.now();
         const activeNodes = getUserNodes().filter(n => now - n.lastSeen < 30000);
+        const currentNodes = getUserNodes();
         
         // Cleanup stale nodes
-        if (activeNodes.length !== getUserNodes().length) {
-          console.log(`[Discovery] Removed ${getUserNodes().length - activeNodes.length} stale nodes`);
+        if (activeNodes.length !== currentNodes.length) {
+          console.log(`[Discovery] Removed ${currentNodes.length - activeNodes.length} stale nodes`);
+          // Update the nodes list in message.js module
           userNodes.length = 0;
           userNodes.push(...activeNodes);
         }
