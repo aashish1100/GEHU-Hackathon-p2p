@@ -1,30 +1,32 @@
 const express = require("express");
+const cors = require("cors");
 const multer = require("multer");
-const { sendMessageToPeer, startListening, sendFile } = require("./message");
-const Discover = require("node-discover");
+const {
+  sendMessageToPeer,
+  startListening,
+  sendFile,
+  getUserNodes
+} = require("./message");
 
 const app = express();
 const PORT = 3000;
 const upload = multer({ dest: "uploads/" });
+
+app.use(cors({
+  origin: "http://localhost:5173",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
 app.use(express.json());
 app.use(express.static("public"));
 
-const userNodes = [];
-const d = new Discover();
 startListening();
-
-d.on("added", (node) => {
-  const exists = userNodes.some((n) => n.address === node.address && n.port === node.port);
-  if (!exists){
-    console.log("added",node.address);
-    userNodes.push(node);}
-});
-
-
 
 function sendFileToPeers(filePath) {
   const fileId = Date.now().toString();
-  userNodes.forEach((peer) => {
+  const peers = getUserNodes();
+  peers.forEach((peer) => {
     sendFile(filePath, fileId, peer.address);
   });
 }
@@ -35,20 +37,20 @@ app.post("/upload", upload.single("file"), (req, res) => {
   res.json({ message: "File uploaded successfully", filePath: filePath });
 });
 
-
 app.post("/broadcast", (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).send("Message is required");
-  console.log(message)  
-  userNodes.forEach((node) => {
-    console.log("sending->" ,node.address)
+
+  console.log("Broadcasting message:", message);
+  const peers = getUserNodes();
+  peers.forEach((node) => {
+    console.log("Sending to ->", node.address);
     sendMessageToPeer(node.address, message);
   });
+
   res.send("Message sent to all peers");
 });
 
-sendMessageToPeer("172.21.8.92","asdf");
-
 app.listen(PORT, () => {
-  console.log(`erver running at http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });

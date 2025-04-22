@@ -5,7 +5,6 @@ const Discover = require("node-discover");
 const udpSocket = dgram.createSocket("udp4");
 const UDP_PORT = 41234;
 
-// Discover and track peers
 const d = new Discover();
 const userNodes = [];
 
@@ -17,7 +16,6 @@ d.on("added", (node) => {
   }
 });
 
-// Broadcast a message to all peers
 function sendMessageToPeer(address, message) {
   const buffer = Buffer.from(message);
   udpSocket.send(buffer, 0, buffer.length, UDP_PORT, address);
@@ -28,8 +26,6 @@ function broadcastMessage(message) {
     sendMessageToPeer(peer.address, message);
   });
 }
-
-// === FILE HANDLING ===
 
 function splitFile(filePath) {
   const fileBuffer = fs.readFileSync(filePath);
@@ -141,6 +137,9 @@ function startListening() {
   
 }
 
+function getUserNodes() {
+  return userNodes;
+}
 
 
 module.exports = {
@@ -149,6 +148,7 @@ module.exports = {
   broadcastMessage,
   sendFile,
   broadcastFile,
+  getUserNodes,
 };
 
 

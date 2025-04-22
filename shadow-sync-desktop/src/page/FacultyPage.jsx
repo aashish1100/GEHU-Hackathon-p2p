@@ -17,9 +17,22 @@ function FacultyPage() {
     { name: "readme.txt" },
   ];
 
-  const handleSendMessage = (message) => {
+  const handleSendMessage = async (message) => {
     const newMessage = { sender: "You", text: message };
-    setMessages([...messages, newMessage]);
+    setMessages((prev) => [...prev, newMessage]);
+
+    try {
+      await fetch("http://localhost:3000/broadcast", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message }),
+      });
+      console.log("Message sent to /broadcast:", message);
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    }
   };
 
   return (
