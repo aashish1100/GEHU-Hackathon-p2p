@@ -1,11 +1,11 @@
 /* eslint-disable no-unused-vars */
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FiSend, FiSmile } from 'react-icons/fi';
-import { IoCheckmarkDone } from 'react-icons/io5';
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FiSend, FiSmile } from "react-icons/fi";
+import { IoCheckmarkDone } from "react-icons/io5";
 
 const ChatArea = ({ messages, onSendMessage }) => {
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
 
@@ -17,14 +17,6 @@ const ChatArea = ({ messages, onSendMessage }) => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (e) => {
-    e.preventDefault();
-    if (message.trim()) {
-      onSendMessage(message);
-      setMessage('');
-    }
-  };
-
   useEffect(() => {
     if (message) setIsTyping(true);
     else setIsTyping(false);
@@ -33,14 +25,22 @@ const ChatArea = ({ messages, onSendMessage }) => {
     return () => clearTimeout(timer);
   }, [message]);
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (message.trim()) {
+      onSendMessage(message);  // Send the message to parent for WebSocket transmission
+      setMessage("");  // Clear the input field
+    }
   };
 
-  const enhancedMessages = messages.map(msg => ({
+  const formatTime = (date) => {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const enhancedMessages = messages.map((msg) => ({
     ...msg,
     time: formatTime(new Date()),
-    read: Math.random() > 0.5
+    read: Math.random() > 0.5,
   }));
 
   return (
@@ -55,9 +55,7 @@ const ChatArea = ({ messages, onSendMessage }) => {
           </div>
           <div>
             <h3 className="font-semibold text-light">Class Chat</h3>
-            <p className="text-xs text-muted">
-              {isTyping ? 'Typing...' : 'Online'}
-            </p>
+            <p className="text-xs text-muted">{isTyping ? "Typing..." : "Online"}</p>
           </div>
         </div>
       </div>
@@ -67,31 +65,27 @@ const ChatArea = ({ messages, onSendMessage }) => {
           {enhancedMessages.map((msg, idx) => (
             <motion.div
               key={idx}
-              className={`flex ${msg.sender === 'You' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${msg.sender === "You" ? "justify-end" : "justify-start"}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
             >
               <div
                 className={`flex max-w-xs lg:max-w-md xl:max-w-lg 2xl:max-w-xl rounded-lg px-4 py-2 ${
-                  msg.sender === 'You' 
-                    ? 'bg-primary text-white rounded-br-none' 
-                    : 'bg-background-gray text-light rounded-bl-none'
+                  msg.sender === "You"
+                    ? "bg-primary text-white rounded-br-none"
+                    : "bg-background-gray text-light rounded-bl-none"
                 }`}
               >
                 <div className="flex flex-col">
-                  {msg.sender !== 'You' && (
-                    <span className="text-xs font-semibold text-primary mb-1">
-                      {msg.sender}
-                    </span>
+                  {msg.sender !== "You" && (
+                    <span className="text-xs font-semibold text-primary mb-1">{msg.sender}</span>
                   )}
                   <p className="text-sm">{msg.text}</p>
-                  <div className={`flex items-center justify-end space-x-1 mt-1 text-xs ${
-                    msg.sender === 'You' ? 'text-primary-dark' : 'text-muted'
-                  }`}>
+                  <div className={`flex items-center justify-end space-x-1 mt-1 text-xs ${msg.sender === "You" ? "text-primary-dark" : "text-muted"}`}>
                     <span>{msg.time}</span>
-                    {msg.sender === 'You' && (
-                      <IoCheckmarkDone className={msg.read ? 'text-secondary' : 'text-muted'} />
+                    {msg.sender === "You" && (
+                      <IoCheckmarkDone className={msg.read ? "text-secondary" : "text-muted"} />
                     )}
                   </div>
                 </div>
