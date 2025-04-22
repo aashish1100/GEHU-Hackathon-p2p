@@ -51,13 +51,11 @@ function FacultyPage() {
 
   const handleSendMessage = (message) => {
     if (message.trim() && ws) {
-      // Send only the raw message text
       ws.send(message);
-      // Add local message immediately with 'You' as sender
       setMessages((prev) => [
         ...prev,
         {
-          sender: 'me', // Special identifier for self
+          sender: 'me',
           content: message,
           timestamp: new Date().toISOString()
         }

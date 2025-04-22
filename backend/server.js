@@ -42,12 +42,12 @@ wss.on("connection", (ws) => {
     broadcastMessage(message.toString());
     
     // Immediately send back to sender with 'me' identifier
-    const messageData = {
-      type: 'message',
-      content: message.toString(),
-      sender: 'me'
-    };
-    ws.send(JSON.stringify(messageData));
+    // const messageData = {
+    //   type: 'message',
+    //   content: message.toString(),
+    //   sender: 'me'
+    // };
+    // ws.send(JSON.stringify(messageData));
   });
 
   ws.on('close', () => {

@@ -7,7 +7,7 @@ const udpSocket = dgram.createSocket("udp4");
 let UDP_PORT = 41234;
 const BROADCAST_ADDR = "255.255.255.255";
 const DISCOVERY_INTERVAL = 5000;
-const NODE_TIMEOUT = 30000; // 30 seconds timeout
+const NODE_TIMEOUT = 30000;
 
 const userNodes = [];
 
