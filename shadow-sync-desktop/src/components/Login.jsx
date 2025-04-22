@@ -105,7 +105,7 @@ const Login = () => {
                 onChange={(e) => setName(e.target.value)}
                 required
                 className="w-full px-4 py-3 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-                placeholder="John Doe"
+                placeholder="Username"
                 autoComplete="name"
                 aria-label="Enter your name"
               />

@@ -187,7 +187,6 @@ function startListening() {
       try {
         const data = JSON.parse(msg.toString());
         
-        // Handle discovery messages
         if (data.type === 'discovery') {
           handleDiscoveryMessage(msg, rinfo);
           return;
