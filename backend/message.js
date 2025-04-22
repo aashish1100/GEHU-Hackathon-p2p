@@ -214,17 +214,27 @@ function startListening() {
             break;
             
           case "peerList":
+            data.peers.forEach(address => {
+              const existingNode = userNodes.find(n => n.address === address);
+              if (!existingNode && address !== getLocalIP()) {
+                userNodes.push({
+                  address: address,
+                  port: UDP_PORT,
+                  lastSeen: Date.now()
+                });
+              }
+            });
             break;
             
           default:
             if (textMessageHandler) {
-              textMessageHandler(msg.toString());
+              textMessageHandler(msg.toString(), rinfo);
             }
         }
       } catch (e) {
         console.log(`[UDP] Raw message from ${rinfo.address}: ${msg.toString().slice(0, 50)}...`);
         if (textMessageHandler) {
-          textMessageHandler(msg.toString());
+          textMessageHandler(msg.toString(), rinfo);
         }
       }
     });
@@ -259,5 +269,6 @@ module.exports = {
   sendFile,
   getUserNodes,
   onTextMessage,
-  UDP_PORT
+  UDP_PORT,
+  getLocalIP
 };

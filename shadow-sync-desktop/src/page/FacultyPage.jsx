@@ -6,20 +6,37 @@ import ChatArea from "../components/ChatArea";
 
 function FacultyPage() {
   const [messages, setMessages] = useState([]);
+  const [peers, setPeers] = useState([]);
   const [ws, setWs] = useState(null);
 
   useEffect(() => {
-    // WebSocket setup for receiving messages
-    const websocket = new WebSocket("ws://localhost:3000"); // Server URL
+    const websocket = new WebSocket("ws://localhost:3000");
 
     websocket.onopen = () => {
       console.log("Connected to WebSocket server");
     };
 
     websocket.onmessage = (event) => {
-      const incomingMessage = JSON.parse(event.data);
-      if (incomingMessage) {
-        setMessages((prevMessages) => [...prevMessages, incomingMessage]);
+      const data = JSON.parse(event.data);
+      
+      switch(data.type) {
+        case 'message':
+          setMessages((prev) => [
+            ...prev, 
+            {
+              sender: data.sender,
+              content: data.content,
+              timestamp: new Date().toISOString()
+            }
+          ]);
+          break;
+          
+        case 'peerList':
+          setPeers(data.peers);
+          break;
+          
+        default:
+          console.log('Unhandled message type:', data.type);
       }
     };
 
@@ -27,21 +44,24 @@ function FacultyPage() {
       console.log("Disconnected from WebSocket server");
     };
 
-    setWs(websocket);  // Store WebSocket instance
+    setWs(websocket);
 
-    // Cleanup WebSocket connection on component unmount
-    return () => {
-      if (websocket) {
-        websocket.close();
-      }
-    };
+    return () => websocket.close();
   }, []);
 
   const handleSendMessage = (message) => {
     if (message.trim() && ws) {
-      const newMessage = { sender: "You", text: message };
-      ws.send(JSON.stringify(newMessage)); // Send message via WebSocket
-      setMessages((prev) => [...prev, newMessage]); // Add message to state for immediate UI update
+      // Send only the raw message text
+      ws.send(message);
+      // Add local message immediately with 'You' as sender
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: 'me', // Special identifier for self
+          content: message,
+          timestamp: new Date().toISOString()
+        }
+      ]);
     }
   };
 
@@ -51,9 +71,16 @@ function FacultyPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="flex flex-col gap-6">
             <FileUpload onUpload={(e) => console.log(e.target.files[0])} />
-            <FileList files={[]} /> {/* Update to handle file uploads if needed */}
+            <FileList files={[]} />
           </div>
-          <ChatArea messages={messages} onSendMessage={handleSendMessage} />
+          <ChatArea 
+            messages={messages.map(msg => ({
+              ...msg,
+              sender: msg.sender === 'me' ? 'You' : msg.sender
+            }))} 
+            peers={peers}
+            onSendMessage={handleSendMessage} 
+          />
         </div>
       </div>
     </Layout>
