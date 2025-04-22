@@ -78,6 +78,7 @@ onTextMessage((msg, rinfo) => {
   
   wsClients.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
+      console.log(JSON.stringify(messageData));
       ws.send(JSON.stringify(messageData));
     }
   });
