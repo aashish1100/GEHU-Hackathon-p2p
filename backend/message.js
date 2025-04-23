@@ -73,7 +73,7 @@ function sendMessageToPeer(address, message) {
   console.log(`[UDP] Sending message to ${address}: ${message.slice(0, 50)}...`);
   const buffer = Buffer.from(message);
   udpSocket.send(buffer, 0, buffer.length, UDP_PORT, address, (err) => {
-    if (err) console.error(`[UDP] Error sending to ${address}:, err`);
+    if (err) console.error(`[UDP] Error sending to ${address}:`, err);
   });
 }
 
