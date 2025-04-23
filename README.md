@@ -13,11 +13,25 @@ This project implements a decentralized P2P network using UDP sockets in Node.js
 
 ## 🚀 Features
 
-- **🔍 Peer Discovery**: Uses UDP broadcasting to find peers in the local network.
-- **💬 Messaging**: Send and receive real-time messages between connected peers.
-- **📁 File Transfer**: Split large files into chunks, send over the network, and reconstruct them at the receiver's end.
-- **🔄 Active Peer Management**: Continuously monitors and updates the list of active peers.
+- **Peer Discovery**: Uses UDP broadcasting to find peers in the local network.
+- **Messaging**: Send and receive real-time messages between connected peers.
+- **File Transfer**: Split large files into chunks, send over the network, and reconstruct them at the receiver's end.
+- **Active Peer Management**: Continuously monitors and updates the list of active peers.
 
 
+## 🛠 Installation
+
+Clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/aashish1100/GEHU-Hackathon-p2p
+
+```
+
+For Backend:
+```npm start```
+
+For Frontend:
+```npm run dev```
 
 
