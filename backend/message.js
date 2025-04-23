@@ -262,36 +262,24 @@ function startListening() {
             case "fileChunk":
               if (receivedFiles[data.fileId]) {
                 const file = receivedFiles[data.fileId];
-                // const receivedFiles = {}; // { fileId: { fileName, totalChunks, chunks: {index: buffer}, chunkOwners: {index: [peerAddresses]} } }
-                // If chunk doesn't exist or is new from a different peer
-                console.log("recived -> fileChunk",data.chunkIndex);
+                
                 if (!file.chunks[data.chunkIndex]) {
-                   console.log("here 1");
-                  // Store the chunk
                   file.chunks[data.chunkIndex] = Buffer.from(data.chunk, "base64");
-                  
-                  // Track which peers have this chunk
-                  // if (!file.chunkOwners) file.chunkOwners = {};
-                  // if (!file.chunkOwners[data.chunkIndex]) {
-                  //   file.chunkOwners[data.chunkIndex] = [rinfo.address];
-                  // } else if (!file.chunkOwners[data.chunkIndex].includes(rinfo.address)) {
-                  //   file.chunkOwners[data.chunkIndex].push(rinfo.address);
-                  // }
-               
-                  console.log("here 2");
-                  redistributeChunks(data.fileId);
-                  
+            
                   const received = Object.keys(file.chunks).length;
-                  console.log(`[File] Received chunk ${data.chunkIndex+1}/${data.totalChunks} of ${file.fileName}`);
+                  console.log(`[File] Received chunk ${data.chunkIndex + 1}/${data.totalChunks} of ${file.fileName}`);
                   
-                  // If we have all chunks, redistribute them
                   if (received === data.totalChunks) {
+                    console.log(`[File] All chunks received for ${file.fileName}. Reconstructing...`);
                     reconstructFile(data.fileId);
+            
+                    // Redistribute only after full receipt
+                    redistributeChunks(data.fileId);
                   }
                 }
               }
               break;
-            
+                        
           case "peerList":
             break;
             
