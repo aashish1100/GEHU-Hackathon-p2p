@@ -7,7 +7,8 @@ import ChatArea from "../components/ChatArea";
 function FacultyPage() {
   const [messages, setMessages] = useState([]);
   const [peers, setPeers] = useState([]);
-  const [ws, setWs] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [ws, setWs] = useState(null)
 
   useEffect(() => {
     const websocket = new WebSocket("ws://localhost:3000");
@@ -63,13 +64,41 @@ function FacultyPage() {
     }
   };
 
+  const handleFileUpload = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('http://localhost:3000/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const result = await response.json();
+      setFiles(prev => [...prev, {
+        name: file.name,
+        path: result.filePath,
+        size: file.size,
+        uploadedAt: new Date().toISOString()
+      }]);
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('File upload failed. Please try again.');
+    }
+  };
+
   return (
     <Layout>
       <div className="px-4 md:px-8 py-6 space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="flex flex-col gap-6">
-            <FileUpload onUpload={(e) => console.log(e.target.files[0])} />
-            <FileList files={[]} />
+            <FileUpload onUpload={handleFileUpload} />
+            <FileList files={files} />
           </div>
           <ChatArea 
             messages={messages.map(msg => ({
