@@ -9,6 +9,7 @@ const BROADCAST_ADDR = "255.255.255.255";
 const DISCOVERY_INTERVAL = 5000;
 
 const userNodes = [];
+const chunkOwnership = {};
 
 function getBestInterface() {
   const interfaces = os.networkInterfaces();
@@ -109,8 +110,7 @@ function sendFile(filePath, fileId, address) {
   const totalChunks = chunks.length;
   const fileName = path.basename(filePath);
 
-  console.log(`[File] Sending ${fileName} (${totalChunks} chunks) to ${address}`);
-
+  // Step 1: Send file metadata
   const fileInfo = {
     type: "fileInfo",
     fileId,
@@ -120,17 +120,25 @@ function sendFile(filePath, fileId, address) {
   };
   sendMessageToPeer(address, JSON.stringify(fileInfo));
 
+  // Step 2: Assign chunks based on round-robin
   chunks.forEach((chunk, index) => {
-    setTimeout(() => {
-      const chunkMsg = {
-        type: "fileChunk",
-        fileId,
-        chunkIndex: index,
-        chunk: chunk.toString("base64"),
-        totalChunks
-      };
-      sendMessageToPeer(address, JSON.stringify(chunkMsg));
-    }, index * 20);
+    const assignedTo = userNodes.findIndex(p => p.address === address);
+    if ((index % userNodes.length) === assignedTo) {
+      setTimeout(() => {
+        const chunkMsg = {
+          type: "fileChunk",
+          fileId,
+          chunkIndex: index,
+          chunk: chunk.toString("base64"),
+          totalChunks
+        };
+        sendMessageToPeer(address, JSON.stringify(chunkMsg));
+
+        if (!chunkOwnership[fileId]) chunkOwnership[fileId] = {};
+        if (!chunkOwnership[fileId][index]) chunkOwnership[fileId][index] = [];
+        chunkOwnership[fileId][index].push(getLocalIP());
+      }, index * 20);
+    }
   });
 }
 
@@ -169,6 +177,55 @@ function onTextMessage(callback) {
   textMessageHandler = callback;
 }
 
+function redistributeChunks(fileId) {
+  const file = receivedFiles[fileId];
+  if (!file || !file.chunks) {
+    console.log("No file or chunks found for redistribution");
+    return;
+  }
+
+  const peers = getUserNodes();
+  if (peers.length === 0) {
+    console.log("No peers available for redistribution");
+    return;
+  }
+
+  console.log(`Redistributing chunks of ${file.fileName} to ${peers.length} peers`);
+
+  // Convert chunks object to array of {index, chunk} pairs
+  const chunkEntries = Object.entries(file.chunks).map(([index, chunk]) => ({
+    index: parseInt(index),
+    chunk
+  }));
+
+  chunkEntries.forEach(({index, chunk}) => {
+    // Select peer using round-robin
+    const targetPeer = peers[index % peers.length];
+    
+    setTimeout(() => {
+      const chunkMsg = {
+        type: "fileChunk",
+        fileId,
+        chunkIndex: index,
+        chunk: chunk.toString("base64"),
+        totalChunks: file.totalChunks
+      };
+      
+      console.log(`Redistributing chunk ${index} to ${targetPeer.address}`);
+      sendMessageToPeer(targetPeer.address, JSON.stringify(chunkMsg));
+
+      // Update ownership tracking
+      if (!chunkOwnership[fileId]) chunkOwnership[fileId] = {};
+      if (!chunkOwnership[fileId][index]) chunkOwnership[fileId][index] = [];
+      
+      // Add peer to ownership if not already present
+      if (!chunkOwnership[fileId][index].includes(targetPeer.address)) {
+        chunkOwnership[fileId][index].push(targetPeer.address);
+      }
+    }, index * 20); // Small delay between chunks
+  });
+}
+
 function startListening() {
   return new Promise((resolve, reject) => {
     udpSocket.on('error', (err) => {
@@ -202,39 +259,51 @@ function startListening() {
             console.log(`[File] Receiving ${data.fileName} (${data.totalChunks} chunks)`);
             break;
             
-          case "fileChunk":
-            if (receivedFiles[data.fileId]) {
-              receivedFiles[data.fileId].chunks[data.chunkIndex] = Buffer.from(data.chunk, "base64");
-              const received = Object.keys(receivedFiles[data.fileId].chunks).length;
-              console.log(`[File] Received chunk ${data.chunkIndex+1}/${data.totalChunks} of ${receivedFiles[data.fileId].fileName}`);
-              if (received === data.totalChunks) {
-                reconstructFile(data.fileId);
+            case "fileChunk":
+              if (receivedFiles[data.fileId]) {
+                const file = receivedFiles[data.fileId];
+                // const receivedFiles = {}; // { fileId: { fileName, totalChunks, chunks: {index: buffer}, chunkOwners: {index: [peerAddresses]} } }
+                // If chunk doesn't exist or is new from a different peer
+                console.log("recived -> fileChunk",data.chunkIndex);
+                if (!file.chunks[data.chunkIndex]) {
+                   console.log("here 1");
+                  // Store the chunk
+                  file.chunks[data.chunkIndex] = Buffer.from(data.chunk, "base64");
+                  
+                  // Track which peers have this chunk
+                  // if (!file.chunkOwners) file.chunkOwners = {};
+                  // if (!file.chunkOwners[data.chunkIndex]) {
+                  //   file.chunkOwners[data.chunkIndex] = [rinfo.address];
+                  // } else if (!file.chunkOwners[data.chunkIndex].includes(rinfo.address)) {
+                  //   file.chunkOwners[data.chunkIndex].push(rinfo.address);
+                  // }
+               
+                  console.log("here 2");
+                  redistributeChunks(data.fileId);
+                  
+                  const received = Object.keys(file.chunks).length;
+                  console.log(`[File] Received chunk ${data.chunkIndex+1}/${data.totalChunks} of ${file.fileName}`);
+                  
+                  // If we have all chunks, redistribute them
+                  if (received === data.totalChunks) {
+                    reconstructFile(data.fileId);
+                  }
+                }
               }
-            }
-            break;
+              break;
             
           case "peerList":
-            data.peers.forEach(address => {
-              const existingNode = userNodes.find(n => n.address === address);
-              if (!existingNode && address !== getLocalIP()) {
-                userNodes.push({
-                  address: address,
-                  port: UDP_PORT,
-                  lastSeen: Date.now()
-                });
-              }
-            });
             break;
             
           default:
             if (textMessageHandler) {
-              textMessageHandler(msg.toString(), rinfo);
+              textMessageHandler(msg.toString());
             }
         }
       } catch (e) {
         console.log(`[UDP] Raw message from ${rinfo.address}: ${msg.toString().slice(0, 50)}...`);
         if (textMessageHandler) {
-          textMessageHandler(msg.toString(), rinfo);
+          textMessageHandler(msg.toString());
         }
       }
     });
