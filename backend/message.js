@@ -8,8 +8,13 @@ let UDP_PORT = 41234;
 const BROADCAST_ADDR = "255.255.255.255";
 const DISCOVERY_INTERVAL = 5000;
 
+const NODE_TIMEOUT = 30000;
+
 const userNodes = [];
-const chunkOwnership = {};
+const setPort=(port)=>
+  {
+      UDP_PORT=port;
+  }
 
 function getBestInterface() {
   const interfaces = os.networkInterfaces();
@@ -171,6 +176,107 @@ function reconstructFile(fileId) {
   }
 }
 
+function splitFile(filePath) {
+  const fileBuffer = fs.readFileSync(filePath);
+  const chunkSize = 1024;
+  const chunks = [];
+  for (let i = 0; i < fileBuffer.length; i += chunkSize) {
+    chunks.push(fileBuffer.slice(i, i + chunkSize));
+  }
+  console.log(`[File] Split ${path.basename(filePath)} into ${chunks.length} chunks`);
+  return chunks;
+}
+
+function sendFile(filePath, fileId, address) {
+  const chunks = splitFile(filePath);
+  const totalChunks = chunks.length;
+  const fileName = path.basename(filePath);
+
+  console.log(`[File] Sending ${fileName} (${totalChunks} chunks) to ${address}`);
+
+  const fileInfo = {
+    type: "fileInfo",
+    fileId,
+    fileName,
+    totalChunks,
+    fileSize: fs.statSync(filePath).size
+  };
+  sendMessageToPeer(address, JSON.stringify(fileInfo));
+
+  chunks.forEach((chunk, index) => {
+    setTimeout(() => {
+      const chunkMsg = {
+        type: "fileChunk",
+        fileId,
+        chunkIndex: index,
+        chunk: chunk.toString("base64"),
+        totalChunks
+      };
+      sendMessageToPeer(address, JSON.stringify(chunkMsg));
+    }, index * 20);  // Stagger sending to avoid network congestion
+  });
+}
+
+const receivedFiles = {};
+
+function handleFileInfo(data) {
+  const { fileId, fileName, totalChunks } = data;
+  console.log(`[File] Receiving ${fileName} (${totalChunks} chunks)`);
+  
+  receivedFiles[fileId] = {
+    fileName,
+    totalChunks,
+    chunks: {}
+  };
+}
+
+function handleFileChunk(data) {
+  const { fileId, chunkIndex, chunk, totalChunks } = data;
+  
+  if (!receivedFiles[fileId]) {
+    console.log(`[File] Received chunk for unknown file ${fileId}`);
+    return;
+  }
+  
+  receivedFiles[fileId].chunks[chunkIndex] = Buffer.from(chunk, "base64");
+  const received = Object.keys(receivedFiles[fileId].chunks).length;
+  console.log(`[File] Received chunk ${chunkIndex+1}/${totalChunks} of ${receivedFiles[fileId].fileName}`);
+  
+  if (received === totalChunks) {
+    reconstructFile(fileId);
+  }
+}
+
+function reconstructFile(fileId) {
+  const file = receivedFiles[fileId];
+  if (!file) return;
+
+  const { fileName, chunks, totalChunks } = file;
+  
+  if (Object.keys(chunks).length !== totalChunks) {
+    console.log(`[File] Cannot reconstruct ${fileName}, missing chunks`);
+    return;
+  }
+  
+  console.log(`[File] Reconstructing ${fileName} (${totalChunks} chunks)`);
+  
+  const chunkArray = [];
+  for (let i = 0; i < totalChunks; i++) {
+    chunkArray.push(chunks[i]);
+  }
+  const fileBuffer = Buffer.concat(chunkArray);
+  
+  if (!fs.existsSync("received_files")) {
+    fs.mkdirSync("received_files");
+  }
+  
+  const outputPath = path.join("received_files", fileName);
+  fs.writeFileSync(outputPath, fileBuffer);
+  console.log(`[File] Saved as ${outputPath}`);
+  
+  delete receivedFiles[fileId];
+}
+
 let textMessageHandler = null;
 
 function onTextMessage(callback) {
@@ -251,36 +357,10 @@ function startListening() {
         
         switch (data.type) {
           case "fileInfo":
-            receivedFiles[data.fileId] = {
-              fileName: data.fileName,
-              totalChunks: data.totalChunks,
-              chunks: {}
-            };
-            console.log(`[File] Receiving ${data.fileName} (${data.totalChunks} chunks)`);
+            handleFileInfo(data);
             break;
-            
-            case "fileChunk":
-              if (receivedFiles[data.fileId]) {
-                const file = receivedFiles[data.fileId];
-                
-                if (!file.chunks[data.chunkIndex]) {
-                  file.chunks[data.chunkIndex] = Buffer.from(data.chunk, "base64");
-            
-                  const received = Object.keys(file.chunks).length;
-                  console.log(`[File] Received chunk ${data.chunkIndex + 1}/${data.totalChunks} of ${file.fileName}`);
-                  
-                  if (received === data.totalChunks) {
-                    console.log(`[File] All chunks received for ${file.fileName}. Reconstructing...`);
-                    reconstructFile(data.fileId);
-            
-                    // Redistribute only after full receipt
-                    redistributeChunks(data.fileId);
-                  }
-                }
-              }
-              break;
-                        
-          case "peerList":
+          case "fileChunk":
+            handleFileChunk(data);
             break;
             
           default:
@@ -327,5 +407,6 @@ module.exports = {
   getUserNodes,
   onTextMessage,
   UDP_PORT,
-  getLocalIP
+  getLocalIP,
+  setPort
 };
