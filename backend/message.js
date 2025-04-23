@@ -123,13 +123,11 @@ function getUserNodes() {
   return activeNodes;
 }
 
-// File transfer functions remain the same
 function splitFile(filePath) { /* ... */ }
 function sendFile(filePath, fileId, address) { /* ... */ }
 const receivedFiles = {};
 function reconstructFile(fileId) { /* ... */ }
 
-// Message handling
 let textMessageHandler = null;
 function onTextMessage(callback) {
   textMessageHandler = callback;
@@ -162,10 +160,8 @@ function startListening() {
             handlePeerListMessage(data.peers);
             break;
           case "fileInfo":
-            // Handle file info
             break;
           case "fileChunk":
-            // Handle file chunks
             break;
           default:
             if (textMessageHandler) {
