@@ -10,6 +10,10 @@ const DISCOVERY_INTERVAL = 5000;
 const NODE_TIMEOUT = 30000;
 
 const userNodes = [];
+const setPort=(port)=>
+  {
+      UDP_PORT=port;
+  }
 
 function getBestInterface() {
   const interfaces = os.networkInterfaces();
@@ -292,5 +296,6 @@ module.exports = {
   updateUserNodes,
   onTextMessage,
   UDP_PORT,
-  getLocalIP
+  getLocalIP,
+  setPort
 };

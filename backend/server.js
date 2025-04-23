@@ -12,8 +12,17 @@ const {
   onTextMessage,
   broadcastMessage,
   UDP_PORT,
-  getLocalIP
+  getLocalIP,
+  setPort,
 } = require("./message");
+
+const definedLab = {
+  "Lab-1": 41234,
+  "Lab-2": 60347,
+  "Lab-3": 52718,
+  "Lab-4": 49177,
+  "Lab-5": 60000,
+};
 
 const app = express();
 const PORT = 3000;
@@ -139,6 +148,18 @@ app.post("/upload", upload.single("file"), (req, res) => {
     peers: getUserNodes().length
   });
 });
+
+app.post("/setPort",(req,res)=>
+  {
+    const {lab}=req.body;
+    console.log(lab);
+  
+    setPort(definedLab[lab]);
+    console.log(definedLab[lab])
+  
+    res.send("Port sended");
+  
+  })
 
 app.post("/broadcast", (req, res) => {
   const { message } = req.body;
