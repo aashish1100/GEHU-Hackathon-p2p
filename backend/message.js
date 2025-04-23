@@ -4,13 +4,13 @@ const path = require("path");
 const os = require("os");
 
 const udpSocket = dgram.createSocket("udp4");
-let UDP_PORT = 41234;
+let UDP_PORT = 41234; // Make it mutable for port fallback
 const BROADCAST_ADDR = "255.255.255.255";
-const DISCOVERY_INTERVAL = 5000;
-const NODE_TIMEOUT = 30000;
+const DISCOVERY_INTERVAL = 5000; // 5 seconds between discovery broadcasts
 
 const userNodes = [];
 
+// Get the best network interface
 function getBestInterface() {
   const interfaces = os.networkInterfaces();
   for (const name in interfaces) {
@@ -32,6 +32,7 @@ function getLocalIP() {
   return iface ? iface.address : '127.0.0.1';
 }
 
+// Broadcast-based peer discovery
 function discoverPeers() {
   const discoveryMsg = {
     type: 'discovery',
@@ -40,95 +41,134 @@ function discoverPeers() {
     port: UDP_PORT,
     timestamp: Date.now()
   };
+
   broadcastMessage(JSON.stringify(discoveryMsg));
 }
 
+// Handle incoming discovery messages
 function handleDiscoveryMessage(msg, rinfo) {
   try {
     const data = JSON.parse(msg.toString());
     if (data.type === 'discovery' && data.action === 'hello') {
       const senderAddress = rinfo.address;
-      const existingNode = userNodes.find(n => n.address === senderAddress);
+      const exists = userNodes.some(n => n.address === senderAddress);
       
-      if (senderAddress === getLocalIP()) return;
-
-      if (!existingNode) {
-        console.log(`[Discovery] New peer: ${senderAddress}`);
+      if (!exists && senderAddress !== getLocalIP()) {
+        console.log(`[Discovery] Found peer: ${senderAddress}`);
         userNodes.push({
           address: senderAddress,
           port: data.port || UDP_PORT,
           lastSeen: Date.now()
         });
         broadcastPeerList();
-      } else {
-        existingNode.lastSeen = Date.now();
+      } else if (exists) {
+        // Update last seen time
+        const node = userNodes.find(n => n.address === senderAddress);
+        if (node) node.lastSeen = Date.now();
       }
     }
   } catch (e) {
-    console.log('[Discovery] Error parsing message:', e.message);
+    console.log('[Discovery] Error parsing discovery message:', e.message);
   }
 }
 
-function updateUserNodes(nodes) {
-  userNodes.length = 0;
-  userNodes.push(...nodes);
-}
-
 function sendMessageToPeer(address, message) {
+  console.log(`[UDP] Sending message to ${address}: ${message.slice(0, 50)}...`);
   const buffer = Buffer.from(message);
   udpSocket.send(buffer, 0, buffer.length, UDP_PORT, address, (err) => {
-    if (err) console.error(`[UDP] Send error to ${address}:`, err);
+    if (err) console.error(`[UDP] Error sending to ${address}:`, err);
   });
 }
 
 function broadcastMessage(message) {
+  console.log(`[UDP] Broadcasting message to LAN`);
   const buffer = Buffer.from(message);
   udpSocket.setBroadcast(true);
-  udpSocket.send(buffer, 0, buffer.length, UDP_PORT, BROADCAST_ADDR);
+  udpSocket.send(buffer, 0, buffer.length, UDP_PORT, BROADCAST_ADDR, (err) => {
+    if (err) console.error("[UDP] Broadcast error:", err);
+  });
 }
 
 function broadcastPeerList() {
   const peerList = {
     type: "peerList",
-    peers: getUserNodes().map(n => n.address)
+    peers: userNodes.map(n => n.address)
   };
   broadcastMessage(JSON.stringify(peerList));
 }
 
-function handlePeerListMessage(peers) {
-  const now = Date.now();
-  peers.forEach(address => {
-    const existingNode = userNodes.find(n => n.address === address);
-    if (!existingNode && address !== getLocalIP()) {
-      userNodes.push({
-        address: address,
-        port: UDP_PORT,
-        lastSeen: now
-      });
-    } else if (existingNode) {
-      existingNode.lastSeen = now;
-    }
+function splitFile(filePath) {
+  const fileBuffer = fs.readFileSync(filePath);
+  const chunkSize = 1024; // 1KB chunks
+  const chunks = [];
+  for (let i = 0; i < fileBuffer.length; i += chunkSize) {
+    chunks.push(fileBuffer.slice(i, i + chunkSize));
+  }
+  console.log(`[File] Split ${path.basename(filePath)} into ${chunks.length} chunks`);
+  return chunks;
+}
+
+function sendFile(filePath, fileId, address) {
+  const chunks = splitFile(filePath);
+  const totalChunks = chunks.length;
+  const fileName = path.basename(filePath);
+
+  console.log(`[File] Sending ${fileName} (${totalChunks} chunks) to ${address}`);
+
+  const fileInfo = {
+    type: "fileInfo",
+    fileId,
+    fileName,
+    totalChunks,
+    fileSize: fs.statSync(filePath).size
+  };
+  sendMessageToPeer(address, JSON.stringify(fileInfo));
+
+  chunks.forEach((chunk, index) => {
+    setTimeout(() => {
+      const chunkMsg = {
+        type: "fileChunk",
+        fileId,
+        chunkIndex: index,
+        chunk: chunk.toString("base64"),
+        totalChunks
+      };
+      sendMessageToPeer(address, JSON.stringify(chunkMsg));
+    }, index * 20);
   });
 }
 
-function getUserNodes() {
-  const now = Date.now();
-  const activeNodes = userNodes.filter(n => now - n.lastSeen < NODE_TIMEOUT);
+const receivedFiles = {};
+
+function reconstructFile(fileId) {
+  const file = receivedFiles[fileId];
+  if (!file) return;
+
+  const { fileName, chunks, totalChunks } = file;
   
-  if (activeNodes.length !== userNodes.length) {
-    console.log(`[Cleanup] Removed ${userNodes.length - activeNodes.length} stale nodes`);
-    updateUserNodes(activeNodes);
+  if (Object.keys(chunks).length === totalChunks) {
+    console.log(`[File] Reconstructing ${fileName} (${totalChunks} chunks)`);
+    
+    const chunkArray = [];
+    for (let i = 0; i < totalChunks; i++) {
+      chunkArray.push(chunks[i]);
+    }
+    const fileBuffer = Buffer.concat(chunkArray);
+    
+    if (!fs.existsSync("received_files")) {
+      fs.mkdirSync("received_files");
+    }
+    
+    const outputPath = path.join("received_files", fileName);
+    fs.writeFileSync(outputPath, fileBuffer);
+    console.log(`[File] Saved as ${outputPath}`);
+    
+    delete receivedFiles[fileId];
   }
-  
-  return activeNodes;
 }
 
-function splitFile(filePath) { /* ... */ }
-function sendFile(filePath, fileId, address) { /* ... */ }
-const receivedFiles = {};
-function reconstructFile(fileId) { /* ... */ }
-
 let textMessageHandler = null;
+
 function onTextMessage(callback) {
   textMessageHandler = callback;
 }
@@ -136,6 +176,7 @@ function onTextMessage(callback) {
 function startListening() {
   return new Promise((resolve, reject) => {
     udpSocket.on('error', (err) => {
+      console.error('[UDP] Socket error:', err);
       if (err.code === 'EADDRINUSE') {
         console.log(`[UDP] Port ${UDP_PORT} in use, trying ${UDP_PORT + 1}`);
         udpSocket.close();
@@ -150,27 +191,46 @@ function startListening() {
       try {
         const data = JSON.parse(msg.toString());
         
+        // Handle discovery messages
         if (data.type === 'discovery') {
           handleDiscoveryMessage(msg, rinfo);
           return;
         }
         
+        // Handle other message types
         switch (data.type) {
-          case "peerList":
-            handlePeerListMessage(data.peers);
-            break;
           case "fileInfo":
+            receivedFiles[data.fileId] = {
+              fileName: data.fileName,
+              totalChunks: data.totalChunks,
+              chunks: {}
+            };
+            console.log(`[File] Receiving ${data.fileName} (${data.totalChunks} chunks)`);
             break;
+            
           case "fileChunk":
+            if (receivedFiles[data.fileId]) {
+              receivedFiles[data.fileId].chunks[data.chunkIndex] = Buffer.from(data.chunk, "base64");
+              const received = Object.keys(receivedFiles[data.fileId].chunks).length;
+              console.log(`[File] Received chunk ${data.chunkIndex+1}/${data.totalChunks} of ${receivedFiles[data.fileId].fileName}`);
+              if (received === data.totalChunks) {
+                reconstructFile(data.fileId);
+              }
+            }
             break;
+            
+          case "peerList":
+            break;
+            
           default:
             if (textMessageHandler) {
-              textMessageHandler(msg.toString(), rinfo);
+              textMessageHandler(msg.toString());
             }
         }
       } catch (e) {
+        console.log(`[UDP] Raw message from ${rinfo.address}: ${msg.toString().slice(0, 50)}...`);
         if (textMessageHandler) {
-          textMessageHandler(msg.toString(), rinfo);
+          textMessageHandler(msg.toString());
         }
       }
     });
@@ -178,11 +238,25 @@ function startListening() {
     udpSocket.bind(UDP_PORT, () => {
       console.log(`[UDP] Listening on port ${UDP_PORT}`);
       udpSocket.setBroadcast(true);
+      
+      // Start periodic peer discovery
       setInterval(discoverPeers, DISCOVERY_INTERVAL);
-      discoverPeers();
+      discoverPeers(); // Initial discovery
+      
       resolve();
     });
   });
+}
+
+function getUserNodes() {
+  const now = Date.now();
+  const activeNodes = userNodes.filter(n => now - n.lastSeen < 60000);
+  if (activeNodes.length !== userNodes.length) {
+    console.log(`[Discovery] Removed ${userNodes.length - activeNodes.length} stale nodes`);
+    userNodes.length = 0;
+    userNodes.push(...activeNodes);
+  }
+  return userNodes;
 }
 
 module.exports = {
@@ -191,8 +265,6 @@ module.exports = {
   broadcastMessage,
   sendFile,
   getUserNodes,
-  updateUserNodes,
   onTextMessage,
-  UDP_PORT,
-  getLocalIP
+  UDP_PORT
 };
